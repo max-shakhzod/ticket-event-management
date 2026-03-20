@@ -1,0 +1,45 @@
+name: ticket_event_management
+description: Ticket Event Management App.
+publish_to: "none"
+version: 1.0.0+1
+
+environment:
+  sdk: "^3.11.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+  cupertino_icons: ^1.0.8
+  google_fonts: ^8.0.2
+  mobile_scanner: ^7.2.0
+  qr_flutter: ^4.1.0
+  intl: ^0.20.2
+  sqflite: ^2.2.4+1
+  path: ^1.8.2
+  path_provider: ^2.0.13
+  url_launcher: ^6.1.10
+  flutter_svg: ^2.2.4
+  scrollable_positioned_list: ^0.3.8
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^6.0.0
+
+flutter:
+  uses-material-design: true
+  assets:
+    - assets/images/
+  fonts:
+    - family: MyFlutterApp
+      fonts:
+        - asset: assets/images/icons/MyFlutterApp.ttf
+    - family: ScanCustomIcon
+      fonts:
+        - asset: assets/images/icons/ScanCustomIcon.ttf
+    - family: Montserrat
+      fonts:
+        - asset: fonts/Montserrat-Regular.ttf
+        - asset: fonts/Montserrat-Bold.ttf
+        - asset: fonts/Montserrat-ExtraBold.ttf
+        - asset: fonts/Montserrat-Light.ttf
