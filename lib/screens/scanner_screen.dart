@@ -1,7 +1,10 @@
-// ignore_for_file: avoid_print
-
 import 'package:flutter/material.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
+import 'package:provider/provider.dart';
+
+import 'package:ticket_event_management/db/ticket_repository.dart';
+import 'package:ticket_event_management/models/models.dart';
+import 'package:ticket_event_management/providers/auth_provider.dart';
 import 'package:ticket_event_management/screens/screens.dart';
 import 'package:ticket_event_management/theme/colors.dart';
 
@@ -15,7 +18,8 @@ class ScannerScreen extends StatefulWidget {
 class _ScannerScreenState extends State<ScannerScreen>
     with WidgetsBindingObserver {
   late final MobileScannerController _controller;
-  bool _hasScanned = false;
+  late final TicketRepository _repo;
+  bool _isProcessing = false;
 
   @override
   void initState() {
@@ -26,6 +30,7 @@ class _ScannerScreenState extends State<ScannerScreen>
       facing: CameraFacing.back,
       torchEnabled: false,
     );
+    _repo = TicketRepository();
   }
 
   @override
@@ -44,21 +49,52 @@ class _ScannerScreenState extends State<ScannerScreen>
     }
   }
 
-  void _onDetect(BarcodeCapture capture) {
-    if (_hasScanned) return;
+  Future<void> _onDetect(BarcodeCapture capture) async {
+    if (_isProcessing) return;
     final barcodes = capture.barcodes;
     if (barcodes.isEmpty) return;
     final rawValue = barcodes.first.rawValue;
     if (rawValue == null || rawValue.isEmpty) return;
 
-    _hasScanned = true;
-    print(rawValue);
+    setState(() => _isProcessing = true);
 
-    Navigator.pushReplacement(
+    final scannedBy =
+        context.read<AuthProvider>().currentUser?.userId ?? 'unknown';
+    final result =
+        await _repo.validateAndScanTicket(rawValue, scannedBy: scannedBy);
+
+    if (!mounted) return;
+
+    // push() so ScannerScreen stays beneath in the stack and is resumed when
+    // RegisterScreen is popped (camera restarts via lifecycle observer).
+    await Navigator.push(
       context,
       MaterialPageRoute(
-        builder: (context) => RegisterScreen(url: rawValue),
-      ),
+          builder: (_) => RegisterScreen(scanResult: result)),
+    );
+
+    if (mounted) setState(() => _isProcessing = false);
+  }
+
+  Widget _buildLeading(BuildContext context) {
+    final role = context.watch<AuthProvider>().role;
+
+    if (role == UserRole.scanner) {
+      // Scanner's root: replace back arrow with logout.
+      return IconButton(
+        icon: const Icon(Icons.logout, color: Colors.black),
+        tooltip: 'Sign out',
+        onPressed: () {
+          Navigator.of(context).popUntil((route) => route.isFirst);
+          context.read<AuthProvider>().logout();
+        },
+      );
+    }
+
+    // Admin / event manager: normal back to HomeScreen.
+    return GestureDetector(
+      child: const Icon(Icons.arrow_back_ios, color: Colors.black),
+      onTap: () => Navigator.of(context).pop(),
     );
   }
 
@@ -66,13 +102,12 @@ class _ScannerScreenState extends State<ScannerScreen>
     final size = MediaQuery.of(context).size;
     final cutOutSize =
         (size.width < 500 || size.height < 500) ? 350.0 : 400.0;
-    final borderLength = 40.0;
-    final borderWidth = 10.0;
-    final borderRadius = 10.0;
+    const borderLength = 40.0;
+    const borderWidth = 10.0;
+    const borderRadius = 10.0;
 
     return Stack(
       children: [
-        // Semi-transparent overlay
         ColorFiltered(
           colorFilter: ColorFilter.mode(
             Colors.black.withValues(alpha: 0.6),
@@ -99,7 +134,6 @@ class _ScannerScreenState extends State<ScannerScreen>
             ],
           ),
         ),
-        // Corner borders
         Center(
           child: SizedBox(
             width: cutOutSize,
@@ -140,23 +174,8 @@ class _ScannerScreenState extends State<ScannerScreen>
             fontWeight: FontWeight.bold,
           ),
         ),
-        leading: GestureDetector(
-          child: const Icon(
-            Icons.arrow_back_ios,
-            color: Colors.black,
-          ),
-          onTap: () {
-            Navigator.pushAndRemoveUntil(
-              context,
-              MaterialPageRoute(
-                builder: (BuildContext context) => const HomeScreen(),
-              ),
-              (route) => false,
-            );
-          },
-        ),
+        leading: _buildLeading(context),
         actions: [
-          // Flash toggle
           ValueListenableBuilder(
             valueListenable: _controller,
             builder: (context, value, child) {
@@ -174,7 +193,6 @@ class _ScannerScreenState extends State<ScannerScreen>
               );
             },
           ),
-          // Camera flip
           IconButton(
             icon: const Icon(Icons.flip_camera_ios, color: Colors.black),
             onPressed: () => _controller.switchCamera(),
@@ -190,7 +208,7 @@ class _ScannerScreenState extends State<ScannerScreen>
             const Padding(
               padding: EdgeInsets.all(20.0),
               child: Text(
-                'Scan from Guest Qr Code to\n verify attendance',
+                'Scan from Guest QR Code to\nverify attendance',
                 style: TextStyle(
                   fontSize: 16,
                   fontWeight: FontWeight.w600,
@@ -217,6 +235,10 @@ class _ScannerScreenState extends State<ScannerScreen>
                     },
                   ),
                   _buildScannerOverlay(context),
+                  if (_isProcessing)
+                    const Center(
+                      child: CircularProgressIndicator(color: customGreen),
+                    ),
                 ],
               ),
             ),
@@ -227,7 +249,6 @@ class _ScannerScreenState extends State<ScannerScreen>
   }
 }
 
-/// Paints the four corner brackets of a QR scan viewport.
 class _CornerBorderPainter extends CustomPainter {
   final Color color;
   final double borderLength;
